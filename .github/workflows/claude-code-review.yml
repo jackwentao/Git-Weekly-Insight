@@ -1,0 +1,31 @@
+name: Claude Code PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  claude-code-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Claude Code Action Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Review this pull request for code quality, reliability, security issues, and potential bugs.
+            Focus on:
+            1. Behavioral regressions
+            2. Error handling and edge cases
+            3. Test coverage gaps
+            4. Risky changes in API contracts
+            Leave clear, actionable review comments on the PR.
