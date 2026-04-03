@@ -1,31 +1,25 @@
-name: Claude Code PR Review
+name: DeepSeek Code Review
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
 jobs:
-  claude-code-review:
+  review:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Claude Code Action Review
-        uses: anthropics/claude-code-action@beta
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: |
-            Review this pull request for code quality, reliability, security issues, and potential bugs.
-            Focus on:
-            1. Behavioral regressions
-            2. Error handling and edge cases
-            3. Test coverage gaps
-            4. Risky changes in API contracts
-            Leave clear, actionable review comments on the PR.
+          fetch-depth: 2 # 必须拉取至少两层提交，AI 才能对比改动
+
+      - name: DeepSeek Reviewer
+        uses: anc95/ChatGPT-CodeReview@main
+        env:
+          # 核心：虽然名字叫 OPENAI，但我们喂给它 DeepSeek 的 Key 和地址
+          OPENAI_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }} 
+          OPENAI_API_BASE: "https://api.deepseek.com" # 这里填 DeepSeek 官方或你的中转地址
+          MODEL: "deepseek-reasoner" # 或者用 deepseek-chat
+          LANGUAGE: "Chinese" # 让它用中文给你写评论，更直观
+          PROMPT: "请以资深全栈工程师的角色，审查这段代码的逻辑漏洞、性能隐患和代码风格。重点关注 Node.js 和 TypeScript 的最佳实践。"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
