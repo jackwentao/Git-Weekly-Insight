@@ -186,6 +186,12 @@ WORK_DIR=你的代码根目录
 
 正式生成：npm run report -- generate
 
+CLI E2E：npm run test:e2e
+
+API E2E：npm run test:e2e:api
+
+性能烟测：npm run perf:check
+
 如需走 API 方式
 npm run dev
 然后访问 /api/weekly-report
