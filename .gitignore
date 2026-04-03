@@ -43,3 +43,6 @@ output/*.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+AGENTS.md
+CLAUDE.md
