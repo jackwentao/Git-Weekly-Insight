@@ -1,157 +1,74 @@
-# Git-Weekly-Insight (weekly-report)
+# Git Weekly Insight
 
-自动扫描本地多个 Git 仓库和个人笔记，调用 DeepSeek 生成结构化周报并落盘为 Markdown。
+**把本地 Git 提交和个人笔记整理为 Markdown 周报。** CLI 负责采集、配置自检和生成，Next.js API 提供第二种调用入口。
 
-## 核心能力
-- 多仓库扫描：递归识别 `WORK_DIR` 下的 Git 仓库并采集最近 N 天提交。
-- 笔记整合：读取本地 `THOUGHT_PATH` 内容并融合到上下文。
-- AI 结构化输出：要求模型返回 JSON，再渲染为固定 Markdown 章节。
-- 可靠性：超时、重试、指数退避、结构化日志。
-- 双入口：CLI（主入口）+ Next.js API 路由。
+[CLI 与 API](docs/CLI.md) · [架构与目录](docs/ARCHITECTURE.md) · [配置模板](.env.example)
 
-## 架构图
-```mermaid
-flowchart TD
-	A[CLI / API] --> B[generateWeeklyReport Application]
-	B --> C[Env Loader]
-	B --> D[Git Scanner]
-	B --> E[Thought Reader]
-	D --> F[Prompt Builder]
-	E --> F
-	F --> G[DeepSeek Client<br/>retry timeout backoff]
-	G --> H[AI JSON Parser]
-	H --> I[Markdown Renderer]
-	I --> J[File Writer output]
-	B --> K[Public Output Contract]
-	K --> A
-```
+## 主要能力
 
-## 目录结构
-```text
-.
-├─ src/app/api/weekly-report        # API 入口
-├─ src/bin                          # CLI 和性能检查脚本
-├─ src/lib/config                   # 环境变量加载与校验
-├─ src/lib/git                      # 仓库扫描与 commit 采集
-├─ src/lib/notes                    # 本地笔记读取
-├─ src/lib/prompt                   # Prompt 组装
-├─ src/lib/ai                       # DeepSeek 调用与重试策略
-├─ src/lib/report                   # 编排、解析、渲染、输出契约
-├─ src/lib/utils                    # 结构化日志
-├─ src/types                        # 类型定义
-├─ output                           # 生成报告目录
-└─ .github/workflows                # CI/自动审查工作流
-```
+- 扫描 `WORK_DIR` 下的 Git 仓库，采集最近 N 天的提交。
+- 可选读取 `THOUGHT_PATH` 指定的本地笔记。
+- 调用 DeepSeek，解析结构化 JSON，再渲染并保存 Markdown。
+- 提供超时、重试、退避和结构化日志。
 
-## 快速上手（详细）
+## 快速开始
 
-### 1. 安装依赖
-```bash
-npm install
-```
+准备 **Node.js 20.9+、npm 和 Git**。项目使用 Next.js 16.2.2 / React 19.2.4。以下 PowerShell 命令均在**仓库根目录**执行：
 
-### 2. 配置环境变量
-复制示例并填写：
-
-```bash
-# PowerShell
+```powershell
+npm ci
 Copy-Item .env.example .env
-```
-
-最小必填项：
-- `DEEPSEEK_API_KEY`
-- `WORK_DIR`
-
-推荐项：
-- `THOUGHT_PATH`
-- `SINCE_DAYS`
-- `DEEPSEEK_MODEL`
-- `DEEPSEEK_RETRY_COUNT`
-- `DEEPSEEK_TIMEOUT_MS`
-- `DEEPSEEK_BACKOFF_MS`
-
-### 3. 先做配置自检
-```bash
 npm run report -- check-config
-```
-
-### 4. 预演采集（不调用 AI）
-```bash
 npm run report -- dry-run
 ```
 
-### 5. 生成周报
-```bash
+先把 `.env` 的 `WORK_DIR` 改为待统计仓库的父目录。`dry-run` 只采集并输出预览，无需模型密钥。
+
+需要生成周报时，填写 `DEEPSEEK_API_KEY`，再执行：
+
+```powershell
 npm run report -- generate
 ```
 
-输出位置：
-- `output/Weekly_Report_YYYY_Wxx.md`
+报告保存在 `output/`。生成时会把采集到的提交信息和选定笔记发送给配置的 DeepSeek 服务，使用前请确认统计目录与笔记范围。
 
-### 6. 在任意目录使用 weekly-report 命令
-当前项目支持全局命令方式。若你的系统不允许 `npm link`（Windows 常见 EPERM），可以用用户级命令 shim：
+## 配置
+
+| 变量 | 用途 / 默认值 |
+| --- | --- |
+| `WORK_DIR` | 待扫描的本地目录，采集时必填 |
+| `DEEPSEEK_API_KEY` | 生成周报时必填；自检和预演不要求 |
+| `THOUGHT_PATH` | 可选笔记文件 |
+| `SINCE_DAYS` | 统计天数，默认 `7` |
+| `DEEPSEEK_MODEL` | 默认 `deepseek-chat` |
+| `DEEPSEEK_RETRY_COUNT` | 默认 `2` |
+| `DEEPSEEK_TIMEOUT_MS` | 默认 `15000` |
+| `DEEPSEEK_BACKOFF_MS` | 默认 `500` |
+
+CLI 从当前工作目录读取 `.env`，配置定义见 [env.ts](src/lib/config/env.ts)。跨目录调用方式见 [CLI 指南](docs/CLI.md)。
+
+## 验证
 
 ```powershell
-$cmdDir = Join-Path $env:APPDATA 'npm'
-if (-not (Test-Path $cmdDir)) { New-Item -ItemType Directory -Path $cmdDir | Out-Null }
-$project = 'D:\Project\AI-Git-Weekly-Insight\weekly-report'
-$line = 'npm --prefix "' + $project + '" run report -- %*'
-Set-Content -Path (Join-Path $cmdDir 'weekly-report.cmd') -Value @('@echo off', $line) -Encoding Ascii
-```
-
-验证：
-```bash
-weekly-report --help
-weekly-report dry-run
-weekly-report
-```
-
-说明：
-- `weekly-report` 无参数时默认执行 `generate`。
-
-## API 使用
-启动服务：
-```bash
-npm run dev
-```
-
-调用接口：
-- `GET /api/weekly-report`
-
-返回契约：
-- 成功：`{ ok: true, data: WeeklyReportResult }`
-- 失败：`{ ok: false, error: { message } }`
-
-## 质量保障与测试
-```bash
 npm run lint
-npm run test
+npm test
 npm run test:e2e
 npm run test:e2e:api
 npm run perf:check
 ```
 
-说明：
-- `test:e2e` 覆盖 CLI 主链路（Git fixture + AI mock + Markdown 落盘）。
-- `test:e2e:api` 覆盖 API Route 主链路。
-- `perf:check` 目标是采集+组装阶段小于 10 秒。
+单元测试覆盖 AI 解析和输出契约，端到端测试使用 Git fixture 与 AI mock。`perf:check` 检查采集与组装阶段的时间预算；它不代表外部模型的生成延迟。
 
-## GitHub PR 自动审查（Claude Code Action）
-已提供工作流：
-- `.github/workflows/claude-code-review.yml`
+## 目录
 
-触发条件：
-- PR 打开、同步、重新打开。
-
-请在仓库 Secrets 中配置：
-- `ANTHROPIC_API_KEY`
-
-## 安全注意事项
-- `.env` 已被 `.gitignore` 忽略，避免 API Key 泄露。
-- 生成产物 `output/*.md` 默认忽略，不会自动提交。
-- 推送前建议执行：
-
-```bash
-git ls-files .env
-git check-ignore -v .env
+```text
+src/bin/       CLI 与性能检查入口
+src/lib/git/   Git 仓库扫描
+src/lib/notes/ 笔记读取
+src/lib/ai/    模型调用
+src/lib/report/ 编排、解析、渲染与落盘
+src/app/api/   Next.js API 入口
+output/        生成的 Markdown，默认忽略
 ```
+
+`.env` 与生成报告默认不提交，`.env.example` 只保存无密钥模板。
